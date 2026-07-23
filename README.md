@@ -37,7 +37,3 @@ flutter build apk --release
 - Provider (state management)
 - Google Drive API (backup)
 - fl_chart (grafik)
-
-## Lisensi
-
-MIT
