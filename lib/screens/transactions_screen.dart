@@ -4,9 +4,11 @@ import 'package:intl/intl.dart';
 import '../extensions/number_format.dart';
 import '../database/app_database.dart';
 import '../providers/database_provider.dart';
+import '../widgets/app_bottom_sheets.dart';
 import '../widgets/icon_helper.dart';
 import '../widgets/gradient_app_bar.dart';
 import 'add_transaction_screen.dart';
+import 'transfer_sheet.dart';
 
 class TransactionsScreen extends ConsumerStatefulWidget {
   const TransactionsScreen({super.key});
@@ -49,50 +51,53 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   }
 
   void _showFilterSheet() {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Filter', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _filterChip('Semua', _filterType == null, () {
-                    setState(() => _filterType = null);
-                    Navigator.pop(ctx);
-                  }),
-                ),
-                Expanded(
-                  child: _filterChip('Pemasukan', _filterType == 'income', () {
-                    setState(() => _filterType = 'income');
-                    Navigator.pop(ctx);
-                  }),
-                ),
-                Expanded(
-                  child: _filterChip('Pengeluaran', _filterType == 'expense', () {
-                    setState(() => _filterType = 'expense');
-                    Navigator.pop(ctx);
-                  }),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
+    showAppBottomSheet<void>(
+      context,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SheetHeader(
+            title: 'Filter Transaksi',
+            subtitle: 'Pilih jenis transaksi yang ingin ditampilkan.',
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _filterChip('Semua', _filterType == null, () {
+                  setState(() => _filterType = null);
+                  Navigator.pop(context);
+                }),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _filterChip('Pemasukan', _filterType == 'income', () {
+                  setState(() => _filterType = 'income');
+                  Navigator.pop(context);
+                }),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _filterChip('Pengeluaran', _filterType == 'expense', () {
+                  setState(() => _filterType = 'expense');
+                  Navigator.pop(context);
+                }),
+              ),
+            ],
+          ),
+        ],
       ),
     ).then((_) => _loadData());
   }
 
   Widget _filterChip(String label, bool selected, VoidCallback onTap) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+    return SizedBox(
+      height: 52,
       child: ChoiceChip(
-        label: Text(label, style: const TextStyle(fontSize: 12)),
+        label: Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
         selected: selected,
+        showCheckmark: false,
         onSelected: (_) => onTap(),
       ),
     );
@@ -105,7 +110,28 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     final expense = _transactions.where((t) => t.type == 'expense').fold(0.0, (s, t) => s + t.amount);
 
     return Scaffold(
-      appBar: gradientAppBar(title: 'Riwayat Transaksi', automaticallyImplyLeading: false),
+      appBar: gradientAppBar(
+        title: 'Riwayat Transaksi',
+        automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.swap_horiz, color: Colors.white),
+            tooltip: 'Pindah Uang',
+            onPressed: () async {
+              final moved = await showAppBottomSheet<bool>(
+                context,
+                child: const TransferSheet(),
+              );
+              if (moved == true && mounted) {
+                _loadData();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Uang berhasil dipindahkan')),
+                );
+              }
+            },
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
         onPressed: () async {
@@ -226,6 +252,12 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                           subtitle: Row(
                             children: [
                               Text(DateFormat('dd/MM/yy').format(t.date), style: const TextStyle(fontSize: 11)),
+                              const SizedBox(width: 8),
+                              Icon(
+                                t.paymentMethod == 'cash' ? Icons.payments : Icons.account_balance_wallet,
+                                size: 12,
+                                color: Colors.grey[500],
+                              ),
                               if (t.isAutoImported) ...[
                                 const SizedBox(width: 8),
                                 Container(

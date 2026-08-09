@@ -6,6 +6,7 @@ import '../database/app_database.dart';
 import '../providers/database_provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/drive_backup_service.dart';
+import '../widgets/app_bottom_sheets.dart';
 import 'categories_screen.dart';
 import 'budgets_screen.dart';
 
@@ -28,9 +29,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void initState() {
     super.initState();
     _db = ref.read(appDatabaseProvider);
-    ref.listen<AuthState>(authProvider, (_, next) {
+    ref.listen<AuthState>(authProvider, (previous, next) {
       if (!next.isLoading && next.isSignedIn) _loadBackups();
       if (!next.isLoading && !next.isSignedIn) setState(() => _backups = []);
+      if (next.error != null && next.error != previous?.error) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(next.error!)),
+        );
+      }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final current = ref.read(authProvider);
@@ -71,15 +77,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _restoreBackup(String fileId) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Restore Data?'),
-        content: const Text('Data saat ini akan diganti dengan data dari backup. Lanjutkan?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Restore')),
-        ],
+    final confirm = await showAppBottomSheet<bool>(
+      context,
+      child: const ConfirmationSheet(
+        title: 'Restore Data?',
+        message: 'Data saat ini akan diganti dengan data dari backup. Lanjutkan?',
+        confirmLabel: 'Restore',
+        icon: Icons.restore,
       ),
     );
     if (confirm != true) return;

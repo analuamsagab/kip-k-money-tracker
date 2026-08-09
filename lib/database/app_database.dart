@@ -32,8 +32,20 @@ class Transactions extends Table {
   BoolColumn? get integratedToBudget => boolean().nullable()();
   TextColumn? get budgetIntegrationType => text().nullable()();
   IntColumn? get targetSemesterId => integer().nullable()();
+  TextColumn get paymentMethod => text().withDefault(const Constant('cash'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+}
+
+@DataClassName('WalletTransfer')
+class WalletTransfers extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get fromMethod => text()();
+  TextColumn get toMethod => text()();
+  RealColumn get amount => real()();
+  DateTimeColumn get date => dateTime()();
+  TextColumn? get note => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
 }
 
 @DataClassName('Budget')
@@ -89,13 +101,14 @@ class MonthlyNeeds extends Table {
     SemesterSettings,
     MonthlyAllocations,
     MonthlyNeeds,
+    WalletTransfers,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
@@ -110,6 +123,13 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(transactions, transactions.integratedToBudget);
           await m.addColumn(transactions, transactions.budgetIntegrationType);
           await m.addColumn(transactions, transactions.targetSemesterId);
+        }
+        if (from < 3) {
+          await m.addColumn(transactions, transactions.paymentMethod);
+          await m.createTable(walletTransfers);
+          await customStatement(
+            "UPDATE transactions SET payment_method = 'cash' WHERE payment_method IS NULL OR payment_method = ''",
+          );
         }
       },
     );
@@ -395,6 +415,72 @@ class AppDatabase extends _$AppDatabase {
         .fold(0.0, (s, n) => s + (n.actualAmount ?? 0));
     return max(0.0, totalActual - alloc.monthlyAmount);
   }
+
+  // ========= PAYMENT METHOD / BALANCE =========
+
+  Future<double> _sumByTypeAndMethod(String type, String method) async {
+    final query = selectOnly(transactions)
+      ..addColumns([transactions.amount.sum()])
+      ..where(transactions.type.equals(type) & transactions.paymentMethod.equals(method));
+    final row = await query.getSingle();
+    return row.read(transactions.amount.sum()) ?? 0;
+  }
+
+  Future<double> _sumTransferByMethod({
+    required bool incoming,
+    required String method,
+  }) async {
+    final col = incoming ? walletTransfers.toMethod : walletTransfers.fromMethod;
+    final query = selectOnly(walletTransfers)
+      ..addColumns([walletTransfers.amount.sum()])
+      ..where(col.equals(method));
+    final row = await query.getSingle();
+    return row.read(walletTransfers.amount.sum()) ?? 0;
+  }
+
+  Future<double> getBalanceByMethod(String method) async {
+    final income = await _sumByTypeAndMethod('income', method);
+    final expense = await _sumByTypeAndMethod('expense', method);
+    final transferIn = await _sumInByMethod(method);
+    final transferOut = await _sumOutByMethod(method);
+    return income - expense + transferIn - transferOut;
+  }
+
+  Future<double> _sumInByMethod(String method) =>
+      _sumTransferByMethod(incoming: true, method: method);
+
+  Future<double> _sumOutByMethod(String method) =>
+      _sumTransferByMethod(incoming: false, method: method);
+
+  Future<double> getTotalBalance() async {
+    final cash = await getBalanceByMethod('cash');
+    final ewallet = await getBalanceByMethod('ewallet');
+    return cash + ewallet;
+  }
+
+  Future<double> getTotalIncomeAllTime() async {
+    final query = selectOnly(transactions)
+      ..addColumns([transactions.amount.sum()])
+      ..where(transactions.type.equals('income'));
+    final row = await query.getSingle();
+    return row.read(transactions.amount.sum()) ?? 0;
+  }
+
+  Future<double> getTotalExpenseAllTime() async {
+    final query = selectOnly(transactions)
+      ..addColumns([transactions.amount.sum()])
+      ..where(transactions.type.equals('expense'));
+    final row = await query.getSingle();
+    return row.read(transactions.amount.sum()) ?? 0;
+  }
+
+  // ========= WALLET TRANSFERS =========
+
+  Future<int> insertTransfer(WalletTransfersCompanion entry) =>
+      into(walletTransfers).insert(entry);
+
+  Future<List<WalletTransfer>> getAllTransfers() =>
+      (select(walletTransfers)..orderBy([(t) => OrderingTerm.desc(t.date)])).get();
 }
 
 LazyDatabase _openConnection() {

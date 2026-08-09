@@ -7,6 +7,10 @@ import 'package:drift/drift.dart' hide Column;
 import '../database/app_database.dart';
 import '../providers/database_provider.dart';
 import '../widgets/gradient_app_bar.dart';
+import '../widgets/app_bottom_sheets.dart';
+import '../widgets/app_button.dart';
+import '../config/app_config.dart';
+import '../widgets/money_field.dart';
 
 class TahanPengeluaranScreen extends ConsumerStatefulWidget {
   const TahanPengeluaranScreen({super.key});
@@ -89,104 +93,37 @@ class _TahanPengeluaranScreenState extends ConsumerState<TahanPengeluaranScreen>
     });
   }
 
-  void _showSemesterDialog() {
+  void _showSemesterSheet() {
     if (_semester != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Masih ada semester aktif. Selesaikan periode ini dulu.')),
       );
       return;
     }
-
-    final controller = TextEditingController();
-    final now = DateTime.now();
-    int startMonth = now.month;
-    int startYear = now.year;
-    int duration = 6;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Input Uang Semester'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                decoration: const InputDecoration(labelText: 'Total Uang Semester', prefixText: 'Rp ', border: OutlineInputBorder()),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                key: const ValueKey('month'),
-                initialValue: startMonth,
-                decoration: const InputDecoration(labelText: 'Bulan Mulai', border: OutlineInputBorder()),
-                items: List.generate(12, (i) => DropdownMenuItem(value: i + 1, child: Text(DateFormat('MMMM').format(DateTime(2020, i + 1))))),
-                onChanged: (v) => setDialogState(() => startMonth = v ?? startMonth),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                key: const ValueKey('duration'),
-                initialValue: duration,
-                decoration: const InputDecoration(labelText: 'Durasi (bulan)', border: OutlineInputBorder()),
-                items: [3, 4, 5, 6].map((d) => DropdownMenuItem(value: d, child: Text('$d bulan'))).toList(),
-                onChanged: (v) => setDialogState(() => duration = v ?? duration),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-            FilledButton(
-              onPressed: () async {
-                final amount = tryParseRupiahInput(controller.text);
-                if (amount == null || amount <= 0) return;
-                await _db.insertSemester(SemesterSettingsCompanion.insert(
-                  totalAmount: amount,
-                  startMonth: startMonth,
-                  startYear: startYear,
-                  durationMonths: Value(duration),
-                  createdAt: DateTime.now(),
-                ));
-                final sem = await _db.getActiveSemester();
-                if (sem != null) {
-                  final monthlyAmount = sem.totalAmount / sem.durationMonths;
-                  for (int i = 0; i < sem.durationMonths; i++) {
-                    int m = sem.startMonth + i;
-                    int y = sem.startYear;
-                    while (m > 12) { m -= 12; y++; }
-                    await _db.insertAllocation(MonthlyAllocationsCompanion.insert(
-                      semesterId: sem.id,
-                      month: m,
-                      year: y,
-                      monthlyAmount: monthlyAmount,
-                    ));
-                  }
-                }
-                Navigator.pop(ctx);
-                _loadData();
-              },
-              child: const Text('Simpan'),
-            ),
-          ],
-        ),
+    showAppBottomSheet<void>(
+      context,
+      child: _SemesterSheet(
+        onSaved: () {
+          _loadData();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Semester berhasil dibuat')),
+            );
+          }
+        },
       ),
     );
   }
 
-  Future<void> _showDeleteSemesterDialog() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Hapus Semester?'),
-        content: const Text('Semua data semester, alokasi bulanan, dan kebutuhan akan dihapus permanen.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Hapus'),
-          ),
-        ],
+  Future<void> _showDeleteSemesterSheet() async {
+    final confirm = await showAppBottomSheet<bool>(
+      context,
+      child: const ConfirmationSheet(
+        title: 'Hapus Semester?',
+        message: 'Semua data semester, alokasi bulanan, dan kebutuhan akan dihapus permanen.',
+        confirmLabel: 'Hapus',
+        isDanger: true,
+        icon: Icons.delete_outline,
       ),
     );
     if (confirm != true || _semester == null) return;
@@ -194,53 +131,91 @@ class _TahanPengeluaranScreenState extends ConsumerState<TahanPengeluaranScreen>
     _loadData();
   }
 
-  void _showAddNeedDialog() {
-    final controller = TextEditingController();
-    final budgetController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Tambah Kebutuhan'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(labelText: 'Nama Kebutuhan', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: budgetController,
-              decoration: const InputDecoration(labelText: 'Anggaran', prefixText: 'Rp ', border: OutlineInputBorder()),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-          FilledButton(
-            onPressed: () async {
-              if (controller.text.isEmpty || budgetController.text.isEmpty) return;
-              final budget = tryParseRupiahInput(budgetController.text);
-              if (budget == null || budget <= 0) return;
-              if (_allocation == null) return;
-              await _db.insertNeed(MonthlyNeedsCompanion.insert(
-                allocationId: _allocation!.id,
-                name: controller.text,
-                budgetedAmount: budget,
-                createdAt: DateTime.now(),
-              ));
-              // Recalc jatah jajan after adding need
-              await _recalcJajan();
-              Navigator.pop(ctx);
-              _loadData();
-            },
-            child: const Text('Tambah'),
-          ),
-        ],
+  void _showAddNeedSheet() {
+    showAppBottomSheet<void>(
+      context,
+      child: _NeedFormSheet(
+        onSubmitted: (name, budget) async {
+          if (_allocation == null) return;
+          await _db.insertNeed(MonthlyNeedsCompanion.insert(
+            allocationId: _allocation!.id,
+            name: name,
+            budgetedAmount: budget,
+            createdAt: DateTime.now(),
+          ));
+          await _recalcJajan();
+          _loadData();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Kebutuhan berhasil ditambahkan')),
+            );
+          }
+        },
       ),
     );
+  }
+
+  void _showCompleteNeedSheet(MonthlyNeed need) {
+    showAppBottomSheet<void>(
+      context,
+      child: _CompleteNeedSheet(
+        need: need,
+        onSubmitted: (actual) async {
+          await _db.updateNeed(need.id, MonthlyNeedsCompanion(
+            actualAmount: Value(actual),
+            isCompleted: Value(true),
+            completedDate: Value(DateTime.now()),
+          ));
+          await _recalcJajan();
+          _loadData();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Kebutuhan selesai. Jatah jajan diperbarui')),
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  void _showEditNeedSheet(MonthlyNeed need) {
+    showAppBottomSheet<void>(
+      context,
+      child: _NeedFormSheet(
+        initialName: need.name,
+        initialBudget: need.budgetedAmount,
+        onSubmitted: (name, budget) async {
+          await _db.updateNeed(need.id, MonthlyNeedsCompanion(
+            name: Value(name),
+            budgetedAmount: Value(budget),
+          ));
+          await _recalcJajan();
+          _loadData();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Kebutuhan diperbarui')),
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  Future<void> _showDeleteNeedSheet(MonthlyNeed need) async {
+    final confirm = await showAppBottomSheet<bool>(
+      context,
+      child: ConfirmationSheet(
+        title: 'Hapus ${need.name}?',
+        message: 'Kebutuhan ini akan dihapus.',
+        confirmLabel: 'Hapus',
+        isDanger: true,
+        icon: Icons.delete_outline,
+      ),
+    );
+    if (confirm != true) return;
+    await _db.deleteNeed(need.id);
+    await _recalcJajan();
+    _loadData();
   }
 
   Future<void> _recalcJajan() async {
@@ -255,115 +230,6 @@ class _TahanPengeluaranScreenState extends ConsumerState<TahanPengeluaranScreen>
     await _db.updateAllocation(_allocation!.id, MonthlyAllocationsCompanion(
       totalJatahJajan: Value(newJajan),
     ));
-  }
-
-  void _showCompleteNeedDialog(MonthlyNeed need) {
-    final controller = TextEditingController(text: need.budgetedAmount.toStringAsFixed(0));
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Selesaikan: ${need.name}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Anggaran: Rp ${NumberFormat.decimalPattern('id').format(need.budgetedAmount)}'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(labelText: 'Real Pengeluaran', prefixText: 'Rp ', border: OutlineInputBorder()),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-          FilledButton(
-            onPressed: () async {
-              final actual = tryParseRupiahInput(controller.text);
-              if (actual == null || actual < 0) return;
-              await _db.updateNeed(need.id, MonthlyNeedsCompanion(
-                actualAmount: Value(actual),
-                isCompleted: Value(true),
-                completedDate: Value(DateTime.now()),
-              ));
-              await _recalcJajan();
-              Navigator.pop(ctx);
-              _loadData();
-            },
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditNeedDialog(MonthlyNeed need) {
-    final nameController = TextEditingController(text: need.name);
-    final budgetController = TextEditingController(text: need.budgetedAmount.toStringAsFixed(0));
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Kebutuhan'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'Nama Kebutuhan', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: budgetController,
-              decoration: const InputDecoration(labelText: 'Anggaran', prefixText: 'Rp ', border: OutlineInputBorder()),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-          FilledButton(
-            onPressed: () async {
-              if (nameController.text.isEmpty || budgetController.text.isEmpty) return;
-              final budget = tryParseRupiahInput(budgetController.text);
-              if (budget == null || budget <= 0) return;
-              await _db.updateNeed(need.id, MonthlyNeedsCompanion(
-                name: Value(nameController.text),
-                budgetedAmount: Value(budget),
-              ));
-              await _recalcJajan();
-              Navigator.pop(ctx);
-              _loadData();
-            },
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteNeedDialog(MonthlyNeed need) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Hapus ${need.name}?'),
-        content: const Text('Kebutuhan ini akan dihapus.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              await _db.deleteNeed(need.id);
-              await _recalcJajan();
-              Navigator.pop(ctx);
-              _loadData();
-            },
-            child: const Text('Hapus'),
-          ),
-        ],
-      ),
-    );
   }
 
   double _totalBudgeted() => _needs.fold(0.0, (s, n) => s + n.budgetedAmount);
@@ -391,20 +257,22 @@ class _TahanPengeluaranScreenState extends ConsumerState<TahanPengeluaranScreen>
         actions: [
           if (_semester != null) IconButton(
             icon: const Icon(Icons.delete_outline, color: Colors.white),
-            onPressed: _showDeleteSemesterDialog,
+            onPressed: _showDeleteSemesterSheet,
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
-          tabs: const [
-            Tab(text: 'Status'),
-            Tab(text: 'Kebutuhan'),
-            Tab(text: 'Riwayat'),
-          ],
-        ),
+        bottom: _semester == null
+            ? null
+            : TabBar(
+                controller: _tabController,
+                indicatorColor: Colors.white,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white60,
+                tabs: const [
+                  Tab(text: 'Status'),
+                  Tab(text: 'Kebutuhan'),
+                  Tab(text: 'Riwayat'),
+                ],
+              ),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -420,7 +288,7 @@ class _TahanPengeluaranScreenState extends ConsumerState<TahanPengeluaranScreen>
                 ),
       floatingActionButton: _semester != null && _tabController.index == 1
           ? FloatingActionButton(
-              onPressed: _showAddNeedDialog,
+              onPressed: _showAddNeedSheet,
               child: const Icon(Icons.add),
             )
           : null,
@@ -434,16 +302,38 @@ class _TahanPengeluaranScreenState extends ConsumerState<TahanPengeluaranScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.shield, size: 80, color: Colors.grey[300]),
-            const SizedBox(height: 20),
-            const Text('Belum ada data semester', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text('Input uang semester kamu dulu', style: TextStyle(color: Colors.grey[500])),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(AppConfig.primaryColor).withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.shield, size: 56, color: Color(AppConfig.primaryColor)),
+            ),
             const SizedBox(height: 24),
+            const Text(
+              'Ayo Atur Pengeluaranmu',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(AppConfig.primaryColor)),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Aktifkan fitur Tahan dengan mengatur uang semestermu.\nJatah jajan bulananmu akan muncul di sini.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600], fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 28),
             FilledButton.icon(
-              onPressed: _showSemesterDialog,
-              icon: const Icon(Icons.add),
-              label: const Text('Input Uang Semester'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(AppConfig.primaryColor),
+                minimumSize: const Size(240, 52),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 2,
+                shadowColor: const Color(AppConfig.primaryColor).withValues(alpha: 0.35),
+              ),
+              onPressed: _showSemesterSheet,
+              icon: const Icon(Icons.add, size: 20),
+              label: const Text('Input Uang Semester', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
             ),
           ],
         ),
@@ -680,15 +570,15 @@ class _TahanPengeluaranScreenState extends ConsumerState<TahanPengeluaranScreen>
                         const SizedBox(width: 4),
                         IconButton(
                           icon: Icon(Icons.edit, size: 18, color: Colors.grey[400]),
-                          onPressed: () => _showEditNeedDialog(n),
+                          onPressed: () => _showEditNeedSheet(n),
                           visualDensity: VisualDensity.compact,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                         ),
                       ],
                     ),
-                    onTap: () => _showCompleteNeedDialog(n),
-                    onLongPress: () => _showDeleteNeedDialog(n),
+                    onTap: () => _showCompleteNeedSheet(n),
+                    onLongPress: () => _showDeleteNeedSheet(n),
                   ),
                 )),
             const SizedBox(height: 16),
@@ -712,7 +602,7 @@ class _TahanPengeluaranScreenState extends ConsumerState<TahanPengeluaranScreen>
                         color: n.actualAmount != null && n.actualAmount! <= n.budgetedAmount ? Colors.green : Colors.red,
                       ),
                     ),
-                    onLongPress: () => _showDeleteNeedDialog(n),
+                    onLongPress: () => _showDeleteNeedSheet(n),
                   ),
                 )),
           ],
@@ -767,6 +657,309 @@ class _TahanPengeluaranScreenState extends ConsumerState<TahanPengeluaranScreen>
           ],
         );
       },
+    );
+  }
+}
+class _SemesterSheet extends ConsumerStatefulWidget {
+  const _SemesterSheet({required this.onSaved});
+
+  final VoidCallback onSaved;
+
+  @override
+  ConsumerState<_SemesterSheet> createState() => _SemesterSheetState();
+}
+
+class _SemesterSheetState extends ConsumerState<_SemesterSheet> {
+  final _controller = TextEditingController();
+  int _startMonth = DateTime.now().month;
+  int _duration = 6;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  bool get _canSave => (double.tryParse(_controller.text.replaceAll('.', '')) ?? 0) > 0;
+
+  Future<void> _save() async {
+    if (!_canSave || _saving) return;
+    setState(() => _saving = true);
+    final amount = tryParseRupiahInput(_controller.text);
+    try {
+      final db = ref.read(appDatabaseProvider);
+      await db.insertSemester(SemesterSettingsCompanion.insert(
+        totalAmount: amount ?? 0,
+        startMonth: _startMonth,
+        startYear: DateTime.now().year,
+        durationMonths: Value(_duration),
+        createdAt: DateTime.now(),
+      ));
+      final sem = await db.getActiveSemester();
+      if (sem != null) {
+        final monthlyAmount = sem.totalAmount / sem.durationMonths;
+        for (int i = 0; i < sem.durationMonths; i++) {
+          int m = sem.startMonth + i;
+          int y = sem.startYear;
+          while (m > 12) {
+            m -= 12;
+            y++;
+          }
+          await db.insertAllocation(MonthlyAllocationsCompanion.insert(
+            semesterId: sem.id,
+            month: m,
+            year: y,
+            monthlyAmount: monthlyAmount,
+          ));
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+    if (mounted) Navigator.pop(context);
+    widget.onSaved();
+  }
+
+  InputDecoration _fieldDecoration(String label, IconData icon) {
+    final primary = const Color(AppConfig.primaryColor);
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, size: 20),
+      prefixIconColor: Colors.grey[500],
+      filled: true,
+      fillColor: Colors.grey[50],
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.grey[300]!),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: primary, width: 1.6),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(
+          offset: Offset(0, 12 * (1 - t)),
+          child: child,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SheetHeader(
+            title: 'Input Uang Semester',
+            subtitle: 'Atur dana semester untuk mulai jatah jajan bulanan.',
+          ),
+          const SizedBox(height: 20),
+          MoneyField(
+            controller: _controller,
+            label: 'Total Uang Semester',
+            helperText: 'Masukkan total dana yang akan digunakan selama satu semester.',
+            autofocus: true,
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<int>(
+            initialValue: _startMonth,
+            decoration: _fieldDecoration('Bulan Mulai', Icons.calendar_month_outlined),
+            items: List.generate(12, (i) => DropdownMenuItem(value: i + 1, child: Text(DateFormat('MMMM').format(DateTime(2020, i + 1))))),
+            onChanged: (v) {
+              FocusManager.instance.primaryFocus?.unfocus();
+              setState(() => _startMonth = v ?? _startMonth);
+            },
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<int>(
+            initialValue: _duration,
+            decoration: _fieldDecoration('Durasi (bulan)', Icons.timelapse_outlined),
+            items: [3, 4, 5, 6].map((d) => DropdownMenuItem(value: d, child: Text('$d bulan'))).toList(),
+            onChanged: (v) {
+              FocusManager.instance.primaryFocus?.unfocus();
+              setState(() => _duration = v ?? _duration);
+            },
+          ),
+          const SizedBox(height: 24),
+          ListenableBuilder(
+            listenable: _controller,
+            builder: (context, _) => AppPrimaryButton(
+              label: 'Simpan',
+              icon: Icons.check,
+              loading: _saving,
+              onPressed: _canSave ? _save : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NeedFormSheet extends ConsumerStatefulWidget {
+  const _NeedFormSheet({this.initialName, this.initialBudget, required this.onSubmitted});
+
+  final String? initialName;
+  final double? initialBudget;
+  final Future<void> Function(String name, double budget) onSubmitted;
+
+  @override
+  ConsumerState<_NeedFormSheet> createState() => _NeedFormSheetState();
+}
+
+class _NeedFormSheetState extends ConsumerState<_NeedFormSheet> {
+  late final TextEditingController _nameController = TextEditingController(text: widget.initialName ?? '');
+  late final TextEditingController _budgetController =
+      TextEditingController(text: widget.initialBudget != null ? groupedAmount(widget.initialBudget!) : '');
+
+  bool get _isEdit => widget.initialName != null;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _budgetController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_nameController.text.isEmpty || _budgetController.text.isEmpty) return;
+    final budget = tryParseRupiahInput(_budgetController.text);
+    if (budget == null || budget <= 0) return;
+    await widget.onSubmitted(_nameController.text.trim(), budget);
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = const Color(AppConfig.primaryColor);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SheetHeader(title: _isEdit ? 'Edit Kebutuhan' : 'Tambah Kebutuhan'),
+        const SizedBox(height: 20),
+        TextField(
+          controller: _nameController,
+          style: const TextStyle(fontSize: 16),
+          decoration: InputDecoration(
+            labelText: 'Nama Kebutuhan',
+            prefixIcon: const Icon(Icons.category_outlined, size: 20),
+            prefixIconColor: Colors.grey[500],
+            filled: true,
+            fillColor: Colors.grey[50],
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: primary, width: 1.6),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          ),
+          autofocus: !_isEdit,
+        ),
+        const SizedBox(height: 16),
+        MoneyField(
+          controller: _budgetController,
+          label: 'Anggaran',
+          helperText: 'Estimasi biaya untuk kebutuhan ini.',
+        ),
+        const SizedBox(height: 24),
+        SheetActions(
+          onConfirm: _submit,
+          confirmLabel: _isEdit ? 'Simpan' : 'Tambah',
+          confirmIcon: _isEdit ? Icons.save_outlined : Icons.add,
+        ),
+      ],
+    );
+  }
+}
+
+class _CompleteNeedSheet extends ConsumerStatefulWidget {
+  const _CompleteNeedSheet({required this.need, required this.onSubmitted});
+
+  final MonthlyNeed need;
+  final Future<void> Function(double actual) onSubmitted;
+
+  @override
+  ConsumerState<_CompleteNeedSheet> createState() => _CompleteNeedSheetState();
+}
+
+class _CompleteNeedSheetState extends ConsumerState<_CompleteNeedSheet> {
+  late final TextEditingController _controller =
+      TextEditingController(text: groupedAmount(widget.need.budgetedAmount));
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final actual = tryParseRupiahInput(_controller.text);
+    if (actual == null || actual < 0) return;
+    await widget.onSubmitted(actual);
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SheetHeader(title: 'Selesaikan Kebutuhan'),
+        const SizedBox(height: 20),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(AppConfig.primaryColor).withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.checklist, size: 18, color: Color(AppConfig.primaryColor)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  widget.need.name,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                formatRupiah(widget.need.budgetedAmount),
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(AppConfig.primaryColor)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        MoneyField(
+          controller: _controller,
+          label: 'Real Pengeluaran',
+          helperText: 'Jumlah yang benar-benar dikeluarkan untuk kebutuhan ini.',
+          autofocus: true,
+        ),
+        const SizedBox(height: 24),
+        SheetActions(
+          onConfirm: _submit,
+          confirmLabel: 'Simpan',
+          confirmIcon: Icons.check,
+        ),
+      ],
     );
   }
 }

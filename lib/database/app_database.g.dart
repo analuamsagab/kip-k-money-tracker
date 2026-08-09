@@ -527,6 +527,18 @@ class $TransactionsTable extends Transactions
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _paymentMethodMeta = const VerificationMeta(
+    'paymentMethod',
+  );
+  @override
+  late final GeneratedColumn<String> paymentMethod = GeneratedColumn<String>(
+    'payment_method',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('cash'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -562,6 +574,7 @@ class $TransactionsTable extends Transactions
     integratedToBudget,
     budgetIntegrationType,
     targetSemesterId,
+    paymentMethod,
     createdAt,
     updatedAt,
   ];
@@ -668,6 +681,15 @@ class $TransactionsTable extends Transactions
         ),
       );
     }
+    if (data.containsKey('payment_method')) {
+      context.handle(
+        _paymentMethodMeta,
+        paymentMethod.isAcceptableOrUnknown(
+          data['payment_method']!,
+          _paymentMethodMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -737,6 +759,10 @@ class $TransactionsTable extends Transactions
         DriftSqlType.int,
         data['${effectivePrefix}target_semester_id'],
       ),
+      paymentMethod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payment_method'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -766,6 +792,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
   final bool? integratedToBudget;
   final String? budgetIntegrationType;
   final int? targetSemesterId;
+  final String paymentMethod;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Transaction({
@@ -780,6 +807,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     this.integratedToBudget,
     this.budgetIntegrationType,
     this.targetSemesterId,
+    required this.paymentMethod,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -805,6 +833,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     if (!nullToAbsent || targetSemesterId != null) {
       map['target_semester_id'] = Variable<int>(targetSemesterId);
     }
+    map['payment_method'] = Variable<String>(paymentMethod);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -831,6 +860,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       targetSemesterId: targetSemesterId == null && nullToAbsent
           ? const Value.absent()
           : Value(targetSemesterId),
+      paymentMethod: Value(paymentMethod),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -857,6 +887,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
         json['budgetIntegrationType'],
       ),
       targetSemesterId: serializer.fromJson<int?>(json['targetSemesterId']),
+      paymentMethod: serializer.fromJson<String>(json['paymentMethod']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -878,6 +909,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
         budgetIntegrationType,
       ),
       'targetSemesterId': serializer.toJson<int?>(targetSemesterId),
+      'paymentMethod': serializer.toJson<String>(paymentMethod),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -895,6 +927,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     Value<bool?> integratedToBudget = const Value.absent(),
     Value<String?> budgetIntegrationType = const Value.absent(),
     Value<int?> targetSemesterId = const Value.absent(),
+    String? paymentMethod,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Transaction(
@@ -917,6 +950,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     targetSemesterId: targetSemesterId.present
         ? targetSemesterId.value
         : this.targetSemesterId,
+    paymentMethod: paymentMethod ?? this.paymentMethod,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -947,6 +981,9 @@ class Transaction extends DataClass implements Insertable<Transaction> {
       targetSemesterId: data.targetSemesterId.present
           ? data.targetSemesterId.value
           : this.targetSemesterId,
+      paymentMethod: data.paymentMethod.present
+          ? data.paymentMethod.value
+          : this.paymentMethod,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -966,6 +1003,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           ..write('integratedToBudget: $integratedToBudget, ')
           ..write('budgetIntegrationType: $budgetIntegrationType, ')
           ..write('targetSemesterId: $targetSemesterId, ')
+          ..write('paymentMethod: $paymentMethod, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -985,6 +1023,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
     integratedToBudget,
     budgetIntegrationType,
     targetSemesterId,
+    paymentMethod,
     createdAt,
     updatedAt,
   );
@@ -1003,6 +1042,7 @@ class Transaction extends DataClass implements Insertable<Transaction> {
           other.integratedToBudget == this.integratedToBudget &&
           other.budgetIntegrationType == this.budgetIntegrationType &&
           other.targetSemesterId == this.targetSemesterId &&
+          other.paymentMethod == this.paymentMethod &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -1019,6 +1059,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
   final Value<bool?> integratedToBudget;
   final Value<String?> budgetIntegrationType;
   final Value<int?> targetSemesterId;
+  final Value<String> paymentMethod;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const TransactionsCompanion({
@@ -1033,6 +1074,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.integratedToBudget = const Value.absent(),
     this.budgetIntegrationType = const Value.absent(),
     this.targetSemesterId = const Value.absent(),
+    this.paymentMethod = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -1048,6 +1090,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     this.integratedToBudget = const Value.absent(),
     this.budgetIntegrationType = const Value.absent(),
     this.targetSemesterId = const Value.absent(),
+    this.paymentMethod = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
   }) : amount = Value(amount),
@@ -1069,6 +1112,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Expression<bool>? integratedToBudget,
     Expression<String>? budgetIntegrationType,
     Expression<int>? targetSemesterId,
+    Expression<String>? paymentMethod,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -1086,6 +1130,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       if (budgetIntegrationType != null)
         'budget_integration_type': budgetIntegrationType,
       if (targetSemesterId != null) 'target_semester_id': targetSemesterId,
+      if (paymentMethod != null) 'payment_method': paymentMethod,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -1103,6 +1148,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     Value<bool?>? integratedToBudget,
     Value<String?>? budgetIntegrationType,
     Value<int?>? targetSemesterId,
+    Value<String>? paymentMethod,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -1119,6 +1165,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
       budgetIntegrationType:
           budgetIntegrationType ?? this.budgetIntegrationType,
       targetSemesterId: targetSemesterId ?? this.targetSemesterId,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -1162,6 +1209,9 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
     if (targetSemesterId.present) {
       map['target_semester_id'] = Variable<int>(targetSemesterId.value);
     }
+    if (paymentMethod.present) {
+      map['payment_method'] = Variable<String>(paymentMethod.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1185,6 +1235,7 @@ class TransactionsCompanion extends UpdateCompanion<Transaction> {
           ..write('integratedToBudget: $integratedToBudget, ')
           ..write('budgetIntegrationType: $budgetIntegrationType, ')
           ..write('targetSemesterId: $targetSemesterId, ')
+          ..write('paymentMethod: $paymentMethod, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -3000,6 +3051,448 @@ class MonthlyNeedsCompanion extends UpdateCompanion<MonthlyNeed> {
   }
 }
 
+class $WalletTransfersTable extends WalletTransfers
+    with TableInfo<$WalletTransfersTable, WalletTransfer> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WalletTransfersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _fromMethodMeta = const VerificationMeta(
+    'fromMethod',
+  );
+  @override
+  late final GeneratedColumn<String> fromMethod = GeneratedColumn<String>(
+    'from_method',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _toMethodMeta = const VerificationMeta(
+    'toMethod',
+  );
+  @override
+  late final GeneratedColumn<String> toMethod = GeneratedColumn<String>(
+    'to_method',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountMeta = const VerificationMeta('amount');
+  @override
+  late final GeneratedColumn<double> amount = GeneratedColumn<double>(
+    'amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
+    'date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    fromMethod,
+    toMethod,
+    amount,
+    date,
+    note,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'wallet_transfers';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WalletTransfer> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('from_method')) {
+      context.handle(
+        _fromMethodMeta,
+        fromMethod.isAcceptableOrUnknown(data['from_method']!, _fromMethodMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fromMethodMeta);
+    }
+    if (data.containsKey('to_method')) {
+      context.handle(
+        _toMethodMeta,
+        toMethod.isAcceptableOrUnknown(data['to_method']!, _toMethodMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_toMethodMeta);
+    }
+    if (data.containsKey('amount')) {
+      context.handle(
+        _amountMeta,
+        amount.isAcceptableOrUnknown(data['amount']!, _amountMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_amountMeta);
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+        _dateMeta,
+        date.isAcceptableOrUnknown(data['date']!, _dateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  WalletTransfer map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WalletTransfer(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      fromMethod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}from_method'],
+      )!,
+      toMethod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}to_method'],
+      )!,
+      amount: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}amount'],
+      )!,
+      date: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}date'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $WalletTransfersTable createAlias(String alias) {
+    return $WalletTransfersTable(attachedDatabase, alias);
+  }
+}
+
+class WalletTransfer extends DataClass implements Insertable<WalletTransfer> {
+  final int id;
+  final String fromMethod;
+  final String toMethod;
+  final double amount;
+  final DateTime date;
+  final String? note;
+  final DateTime createdAt;
+  const WalletTransfer({
+    required this.id,
+    required this.fromMethod,
+    required this.toMethod,
+    required this.amount,
+    required this.date,
+    this.note,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['from_method'] = Variable<String>(fromMethod);
+    map['to_method'] = Variable<String>(toMethod);
+    map['amount'] = Variable<double>(amount);
+    map['date'] = Variable<DateTime>(date);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  WalletTransfersCompanion toCompanion(bool nullToAbsent) {
+    return WalletTransfersCompanion(
+      id: Value(id),
+      fromMethod: Value(fromMethod),
+      toMethod: Value(toMethod),
+      amount: Value(amount),
+      date: Value(date),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory WalletTransfer.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WalletTransfer(
+      id: serializer.fromJson<int>(json['id']),
+      fromMethod: serializer.fromJson<String>(json['fromMethod']),
+      toMethod: serializer.fromJson<String>(json['toMethod']),
+      amount: serializer.fromJson<double>(json['amount']),
+      date: serializer.fromJson<DateTime>(json['date']),
+      note: serializer.fromJson<String?>(json['note']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'fromMethod': serializer.toJson<String>(fromMethod),
+      'toMethod': serializer.toJson<String>(toMethod),
+      'amount': serializer.toJson<double>(amount),
+      'date': serializer.toJson<DateTime>(date),
+      'note': serializer.toJson<String?>(note),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  WalletTransfer copyWith({
+    int? id,
+    String? fromMethod,
+    String? toMethod,
+    double? amount,
+    DateTime? date,
+    Value<String?> note = const Value.absent(),
+    DateTime? createdAt,
+  }) => WalletTransfer(
+    id: id ?? this.id,
+    fromMethod: fromMethod ?? this.fromMethod,
+    toMethod: toMethod ?? this.toMethod,
+    amount: amount ?? this.amount,
+    date: date ?? this.date,
+    note: note.present ? note.value : this.note,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  WalletTransfer copyWithCompanion(WalletTransfersCompanion data) {
+    return WalletTransfer(
+      id: data.id.present ? data.id.value : this.id,
+      fromMethod: data.fromMethod.present
+          ? data.fromMethod.value
+          : this.fromMethod,
+      toMethod: data.toMethod.present ? data.toMethod.value : this.toMethod,
+      amount: data.amount.present ? data.amount.value : this.amount,
+      date: data.date.present ? data.date.value : this.date,
+      note: data.note.present ? data.note.value : this.note,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WalletTransfer(')
+          ..write('id: $id, ')
+          ..write('fromMethod: $fromMethod, ')
+          ..write('toMethod: $toMethod, ')
+          ..write('amount: $amount, ')
+          ..write('date: $date, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, fromMethod, toMethod, amount, date, note, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WalletTransfer &&
+          other.id == this.id &&
+          other.fromMethod == this.fromMethod &&
+          other.toMethod == this.toMethod &&
+          other.amount == this.amount &&
+          other.date == this.date &&
+          other.note == this.note &&
+          other.createdAt == this.createdAt);
+}
+
+class WalletTransfersCompanion extends UpdateCompanion<WalletTransfer> {
+  final Value<int> id;
+  final Value<String> fromMethod;
+  final Value<String> toMethod;
+  final Value<double> amount;
+  final Value<DateTime> date;
+  final Value<String?> note;
+  final Value<DateTime> createdAt;
+  const WalletTransfersCompanion({
+    this.id = const Value.absent(),
+    this.fromMethod = const Value.absent(),
+    this.toMethod = const Value.absent(),
+    this.amount = const Value.absent(),
+    this.date = const Value.absent(),
+    this.note = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  WalletTransfersCompanion.insert({
+    this.id = const Value.absent(),
+    required String fromMethod,
+    required String toMethod,
+    required double amount,
+    required DateTime date,
+    this.note = const Value.absent(),
+    required DateTime createdAt,
+  }) : fromMethod = Value(fromMethod),
+       toMethod = Value(toMethod),
+       amount = Value(amount),
+       date = Value(date),
+       createdAt = Value(createdAt);
+  static Insertable<WalletTransfer> custom({
+    Expression<int>? id,
+    Expression<String>? fromMethod,
+    Expression<String>? toMethod,
+    Expression<double>? amount,
+    Expression<DateTime>? date,
+    Expression<String>? note,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (fromMethod != null) 'from_method': fromMethod,
+      if (toMethod != null) 'to_method': toMethod,
+      if (amount != null) 'amount': amount,
+      if (date != null) 'date': date,
+      if (note != null) 'note': note,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  WalletTransfersCompanion copyWith({
+    Value<int>? id,
+    Value<String>? fromMethod,
+    Value<String>? toMethod,
+    Value<double>? amount,
+    Value<DateTime>? date,
+    Value<String?>? note,
+    Value<DateTime>? createdAt,
+  }) {
+    return WalletTransfersCompanion(
+      id: id ?? this.id,
+      fromMethod: fromMethod ?? this.fromMethod,
+      toMethod: toMethod ?? this.toMethod,
+      amount: amount ?? this.amount,
+      date: date ?? this.date,
+      note: note ?? this.note,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (fromMethod.present) {
+      map['from_method'] = Variable<String>(fromMethod.value);
+    }
+    if (toMethod.present) {
+      map['to_method'] = Variable<String>(toMethod.value);
+    }
+    if (amount.present) {
+      map['amount'] = Variable<double>(amount.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<DateTime>(date.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WalletTransfersCompanion(')
+          ..write('id: $id, ')
+          ..write('fromMethod: $fromMethod, ')
+          ..write('toMethod: $toMethod, ')
+          ..write('amount: $amount, ')
+          ..write('date: $date, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3012,6 +3505,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $MonthlyAllocationsTable monthlyAllocations =
       $MonthlyAllocationsTable(this);
   late final $MonthlyNeedsTable monthlyNeeds = $MonthlyNeedsTable(this);
+  late final $WalletTransfersTable walletTransfers = $WalletTransfersTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3023,6 +3519,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     semesterSettings,
     monthlyAllocations,
     monthlyNeeds,
+    walletTransfers,
   ];
 }
 
@@ -3449,6 +3946,7 @@ typedef $$TransactionsTableCreateCompanionBuilder =
       Value<bool?> integratedToBudget,
       Value<String?> budgetIntegrationType,
       Value<int?> targetSemesterId,
+      Value<String> paymentMethod,
       required DateTime createdAt,
       required DateTime updatedAt,
     });
@@ -3465,6 +3963,7 @@ typedef $$TransactionsTableUpdateCompanionBuilder =
       Value<bool?> integratedToBudget,
       Value<String?> budgetIntegrationType,
       Value<int?> targetSemesterId,
+      Value<String> paymentMethod,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
     });
@@ -3547,6 +4046,11 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<int> get targetSemesterId => $composableBuilder(
     column: $table.targetSemesterId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3643,6 +4147,11 @@ class $$TransactionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -3728,6 +4237,11 @@ class $$TransactionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get paymentMethod => $composableBuilder(
+    column: $table.paymentMethod,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -3797,6 +4311,7 @@ class $$TransactionsTableTableManager
                 Value<bool?> integratedToBudget = const Value.absent(),
                 Value<String?> budgetIntegrationType = const Value.absent(),
                 Value<int?> targetSemesterId = const Value.absent(),
+                Value<String> paymentMethod = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => TransactionsCompanion(
@@ -3811,6 +4326,7 @@ class $$TransactionsTableTableManager
                 integratedToBudget: integratedToBudget,
                 budgetIntegrationType: budgetIntegrationType,
                 targetSemesterId: targetSemesterId,
+                paymentMethod: paymentMethod,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -3827,6 +4343,7 @@ class $$TransactionsTableTableManager
                 Value<bool?> integratedToBudget = const Value.absent(),
                 Value<String?> budgetIntegrationType = const Value.absent(),
                 Value<int?> targetSemesterId = const Value.absent(),
+                Value<String> paymentMethod = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
               }) => TransactionsCompanion.insert(
@@ -3841,6 +4358,7 @@ class $$TransactionsTableTableManager
                 integratedToBudget: integratedToBudget,
                 budgetIntegrationType: budgetIntegrationType,
                 targetSemesterId: targetSemesterId,
+                paymentMethod: paymentMethod,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -5415,6 +5933,246 @@ typedef $$MonthlyNeedsTableProcessedTableManager =
       MonthlyNeed,
       PrefetchHooks Function({bool allocationId})
     >;
+typedef $$WalletTransfersTableCreateCompanionBuilder =
+    WalletTransfersCompanion Function({
+      Value<int> id,
+      required String fromMethod,
+      required String toMethod,
+      required double amount,
+      required DateTime date,
+      Value<String?> note,
+      required DateTime createdAt,
+    });
+typedef $$WalletTransfersTableUpdateCompanionBuilder =
+    WalletTransfersCompanion Function({
+      Value<int> id,
+      Value<String> fromMethod,
+      Value<String> toMethod,
+      Value<double> amount,
+      Value<DateTime> date,
+      Value<String?> note,
+      Value<DateTime> createdAt,
+    });
+
+class $$WalletTransfersTableFilterComposer
+    extends Composer<_$AppDatabase, $WalletTransfersTable> {
+  $$WalletTransfersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fromMethod => $composableBuilder(
+    column: $table.fromMethod,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get toMethod => $composableBuilder(
+    column: $table.toMethod,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$WalletTransfersTableOrderingComposer
+    extends Composer<_$AppDatabase, $WalletTransfersTable> {
+  $$WalletTransfersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get fromMethod => $composableBuilder(
+    column: $table.fromMethod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get toMethod => $composableBuilder(
+    column: $table.toMethod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get amount => $composableBuilder(
+    column: $table.amount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$WalletTransfersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WalletTransfersTable> {
+  $$WalletTransfersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get fromMethod => $composableBuilder(
+    column: $table.fromMethod,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get toMethod =>
+      $composableBuilder(column: $table.toMethod, builder: (column) => column);
+
+  GeneratedColumn<double> get amount =>
+      $composableBuilder(column: $table.amount, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$WalletTransfersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WalletTransfersTable,
+          WalletTransfer,
+          $$WalletTransfersTableFilterComposer,
+          $$WalletTransfersTableOrderingComposer,
+          $$WalletTransfersTableAnnotationComposer,
+          $$WalletTransfersTableCreateCompanionBuilder,
+          $$WalletTransfersTableUpdateCompanionBuilder,
+          (
+            WalletTransfer,
+            BaseReferences<
+              _$AppDatabase,
+              $WalletTransfersTable,
+              WalletTransfer
+            >,
+          ),
+          WalletTransfer,
+          PrefetchHooks Function()
+        > {
+  $$WalletTransfersTableTableManager(
+    _$AppDatabase db,
+    $WalletTransfersTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WalletTransfersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WalletTransfersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WalletTransfersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> fromMethod = const Value.absent(),
+                Value<String> toMethod = const Value.absent(),
+                Value<double> amount = const Value.absent(),
+                Value<DateTime> date = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => WalletTransfersCompanion(
+                id: id,
+                fromMethod: fromMethod,
+                toMethod: toMethod,
+                amount: amount,
+                date: date,
+                note: note,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String fromMethod,
+                required String toMethod,
+                required double amount,
+                required DateTime date,
+                Value<String?> note = const Value.absent(),
+                required DateTime createdAt,
+              }) => WalletTransfersCompanion.insert(
+                id: id,
+                fromMethod: fromMethod,
+                toMethod: toMethod,
+                amount: amount,
+                date: date,
+                note: note,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$WalletTransfersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WalletTransfersTable,
+      WalletTransfer,
+      $$WalletTransfersTableFilterComposer,
+      $$WalletTransfersTableOrderingComposer,
+      $$WalletTransfersTableAnnotationComposer,
+      $$WalletTransfersTableCreateCompanionBuilder,
+      $$WalletTransfersTableUpdateCompanionBuilder,
+      (
+        WalletTransfer,
+        BaseReferences<_$AppDatabase, $WalletTransfersTable, WalletTransfer>,
+      ),
+      WalletTransfer,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5431,4 +6189,6 @@ class $AppDatabaseManager {
       $$MonthlyAllocationsTableTableManager(_db, _db.monthlyAllocations);
   $$MonthlyNeedsTableTableManager get monthlyNeeds =>
       $$MonthlyNeedsTableTableManager(_db, _db.monthlyNeeds);
+  $$WalletTransfersTableTableManager get walletTransfers =>
+      $$WalletTransfersTableTableManager(_db, _db.walletTransfers);
 }

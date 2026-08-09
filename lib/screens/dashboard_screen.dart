@@ -8,10 +8,12 @@ import '../database/app_database.dart';
 import '../providers/database_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/icon_helper.dart';
+import '../widgets/month_picker_sheet.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   final VoidCallback? onNavigateToTransactions;
-  const DashboardScreen({super.key, this.onNavigateToTransactions});
+  final VoidCallback? onNavigateToTahan;
+  const DashboardScreen({super.key, this.onNavigateToTransactions, this.onNavigateToTahan});
 
   @override
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
@@ -20,9 +22,17 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   double _totalIncome = 0;
   double _totalExpense = 0;
+  double _cashBalance = 0;
+  double _ewalletBalance = 0;
   List<Transaction> _recentTransactions = [];
+  List<Transaction> _transactions = [];
   List<Category> _categories = [];
   Map<int, double> _expenseByCategory = {};
+  DateTime _categoryMonth = DateTime.now();
+  bool _categoryFilterAll = true;
+  SemesterSetting? _semester;
+  MonthlyAllocation? _allocation;
+  double _jajanUsed = 0;
   bool _loading = true;
 
   late final AppDatabase _db;
@@ -36,28 +46,74 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Future<void> _loadData() async {
     final now = DateTime.now();
-    final income = await _db.getTotalIncomeByMonth(now.month, now.year);
-    final expense = await _db.getTotalExpenseByMonth(now.month, now.year);
+    final income = await _db.getTotalIncomeAllTime();
+    final expense = await _db.getTotalExpenseAllTime();
+    final cash = await _db.getBalanceByMethod('cash');
+    final ewallet = await _db.getBalanceByMethod('ewallet');
     final txs = await _db.getAllTransactions();
     final cats = await _db.getAllCategories();
-    final catExpense = <int, double>{};
-    final start = DateTime(now.year, now.month, 1);
-    final end = DateTime(now.year, now.month + 1, 1);
-    final monthTxs = txs.where((t) =>
-        t.date.isAfter(start) && t.date.isBefore(end) && t.type == 'expense');
-    for (final t in monthTxs) {
-      catExpense.update(t.categoryId, (v) => v + t.amount, ifAbsent: () => t.amount);
+
+    final semester = await _db.getActiveSemester();
+    MonthlyAllocation? allocation;
+    var jajanUsed = 0.0;
+    if (semester != null) {
+      allocation = await _db.getAllocationByMonth(now.month, now.year, semester.id);
+      if (allocation != null) {
+        jajanUsed = await _db.getTotalJajanUsed(now.month, now.year);
+      }
     }
 
     setState(() {
       _totalIncome = income;
       _totalExpense = expense;
+      _cashBalance = cash;
+      _ewalletBalance = ewallet;
       _recentTransactions = txs.take(5).toList();
+      _transactions = txs;
       _categories = cats;
-      _expenseByCategory = catExpense;
+      _expenseByCategory = _computeExpenseByCategory();
+      _semester = semester;
+      _allocation = allocation;
+      _jajanUsed = jajanUsed;
       _loading = false;
     });
   }
+
+  Map<int, double> _computeExpenseByCategory() {
+    final result = <int, double>{};
+    for (final t in _transactions) {
+      if (t.type != 'expense') continue;
+      if (!_categoryFilterAll &&
+          (t.date.year != _categoryMonth.year ||
+              t.date.month != _categoryMonth.month)) {
+        continue;
+      }
+      result.update(t.categoryId, (v) => v + t.amount, ifAbsent: () => t.amount);
+    }
+    return result;
+  }
+
+  void _setCategoryFilter({required bool all, DateTime? month}) {
+    setState(() {
+      _categoryFilterAll = all;
+      if (month != null) _categoryMonth = month;
+      _expenseByCategory = _computeExpenseByCategory();
+    });
+  }
+
+  Future<void> _pickCategoryMonth() async {
+    final picked = await showMonthPickerSheet(
+      context,
+      initialYear: _categoryMonth.year,
+      initialMonth: _categoryMonth.month,
+    );
+    if (picked != null) {
+      _setCategoryFilter(all: false, month: picked);
+    }
+  }
+
+  String get _categoryPeriodLabel =>
+      _categoryFilterAll ? 'Semua waktu' : DateFormat('MMMM yyyy').format(_categoryMonth);
 
   @override
   Widget build(BuildContext context) {
@@ -141,11 +197,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Widget _buildBalanceAnimated() {
-    final balance = _totalIncome - _totalExpense;
+    final balance = _cashBalance + _ewalletBalance;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Saldo Bulan Ini', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 13)),
+        Text('Sisa Duit Kamu', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 13)),
         const SizedBox(height: 4),
         TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: balance),
@@ -154,11 +210,69 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           builder: (context, value, _) {
             return Text(
               formatRupiah(value),
-              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white),
+              style: const TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
             );
           },
         ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            _methodChip(Icons.payments, 'Cash', _cashBalance),
+            const SizedBox(width: 10),
+            _methodChip(Icons.account_balance_wallet, 'E-Wallet', _ewalletBalance),
+          ],
+        ),
       ],
+    );
+  }
+
+  Widget _methodChip(IconData icon, String label, double amount) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 16, color: Colors.white),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                formatRupiah(amount),
+                maxLines: 1,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -224,65 +338,276 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  Widget _buildProgressRing() {
-    final pct = _totalIncome > 0 ? (_totalExpense / _totalIncome).clamp(0.0, 1.0) : 0.0;
-    final barColor = pct > 0.8 ? Colors.red : pct > 0.6 ? Colors.orange : Colors.green;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Sisa Budget Bulan Ini', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 12),
-            Row(
+  Widget _buildTahanStatsCard() {
+    if (_semester == null || _allocation == null) {
+      return Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        clipBehavior: Clip.antiAlias,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: InkWell(
+          onTap: widget.onNavigateToTahan,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(AppConfig.primaryColor).withValues(alpha: 0.06),
+                  Colors.white,
+                ],
+              ),
+              border: Border.all(color: const Color(AppConfig.primaryColor).withValues(alpha: 0.15)),
+            ),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  width: 140,
-                  height: 140,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      CircularProgressIndicator(
-                        value: pct,
-                        color: barColor,
-                        strokeWidth: 14,
-                        backgroundColor: Colors.grey[200],
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(AppConfig.primaryColor).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      Text(
-                        '${((1 - pct) * 100).toStringAsFixed(0)}%',
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: barColor),
-                      ),
-                    ],
+                      child: const Icon(Icons.shield, color: Color(AppConfig.primaryColor), size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text('Jatah Jajan Bulan Ini', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                    ),
+                    const Icon(Icons.chevron_right, color: Color(AppConfig.primaryColor), size: 20),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Sisa Jatah Jajan',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  formatRupiah(0),
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.grey[400],
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
-                const SizedBox(width: 20),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _miniStat('Pemasukan', formatRupiah(_totalIncome), Colors.green),
-                      const SizedBox(height: 6),
-                      _miniStat('Pengeluaran', formatRupiah(_totalExpense), Colors.red),
-                      const SizedBox(height: 6),
-                      _miniStat('Sisa', formatRupiah(_totalIncome - _totalExpense), barColor),
-                    ],
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _statBlock('Jatah Jajan', formatRupiah(0), Colors.orange[700]!),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _statBlock('Terpakai', formatRupiah(0), Colors.red),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(5),
+                  child: LinearProgressIndicator(
+                    value: 0,
+                    backgroundColor: Colors.grey[200],
+                    color: Colors.grey[400],
+                    minHeight: 10,
                   ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Ayo atur pengeluaranmu',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(AppConfig.primaryColor)),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Ketuk panel ini untuk mengaktifkan fitur Tahan pengeluaranmu',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600], height: 1.3),
                 ),
               ],
             ),
-          ],
+          ),
         ),
+      );
+    }
+
+    final jajan = _allocation!.totalJatahJajan;
+    final sisa = jajan - _jajanUsed;
+    final pct = jajan > 0 ? (_jajanUsed / jajan).clamp(0.0, 1.0) : 0.0;
+    final barColor = pct > 0.8 ? Colors.red : pct > 0.6 ? Colors.orange : Colors.green;
+    final sisaColor = sisa < 0 ? Colors.red : Colors.green[700]!;
+
+    final card = Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: widget.onNavigateToTahan,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(AppConfig.primaryColor).withValues(alpha: 0.06),
+                Colors.white,
+              ],
+            ),
+            border: Border.all(color: const Color(AppConfig.primaryColor).withValues(alpha: 0.15)),
+          ),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(AppConfig.primaryColor).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.shield, color: Color(AppConfig.primaryColor), size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text('Jatah Jajan Bulan Ini', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  ),
+                  const Icon(Icons.chevron_right, color: Color(AppConfig.primaryColor), size: 20),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Sisa Jatah Jajan',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                formatRupiah(sisa),
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: sisaColor,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _statBlock('Jatah Jajan', formatRupiah(jajan), Colors.orange[700]!),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _statBlock('Terpakai', formatRupiah(_jajanUsed), Colors.red),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(5),
+                child: LinearProgressIndicator(
+                  value: pct,
+                  backgroundColor: Colors.grey[200],
+                  color: barColor,
+                  minHeight: 10,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${(pct * 100).toStringAsFixed(0)}% terpakai',
+                style: TextStyle(fontSize: 11, color: pct > 0.8 ? Colors.red : Colors.grey[600]),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return card;
+  }
+
+  Widget _statBlock(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _miniStat(String label, String value, Color color) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _categoryHeader() {
+    final now = DateTime.now();
+    final isThisMonth = !_categoryFilterAll &&
+        _categoryMonth.year == now.year &&
+        _categoryMonth.month == now.month;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+        Text('Pengeluaran per Kategori', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 2),
+        Text(
+          _categoryPeriodLabel,
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('Semua'),
+              selected: _categoryFilterAll,
+              showCheckmark: false,
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              selectedColor: const Color(AppConfig.primaryColor).withValues(alpha: 0.12),
+              labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              onSelected: (_) => _setCategoryFilter(all: true),
+            ),
+            ChoiceChip(
+              label: const Text('Bulan Ini'),
+              selected: isThisMonth,
+              showCheckmark: false,
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              selectedColor: const Color(AppConfig.primaryColor).withValues(alpha: 0.12),
+              labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              onSelected: (_) => _setCategoryFilter(all: false, month: now),
+            ),
+            ChoiceChip(
+              label: const Text('Pilih Bulan…'),
+              selected: !_categoryFilterAll && !isThisMonth,
+              showCheckmark: false,
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              selectedColor: const Color(AppConfig.primaryColor).withValues(alpha: 0.12),
+              labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              onSelected: (_) => _pickCategoryMonth(),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -294,11 +619,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
-              const Text('Pengeluaran per Kategori', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              _categoryHeader(),
+              const SizedBox(height: 16),
               SizedBox(
                 height: 200,
                 child: Center(
-                  child: Text('Belum ada pengeluaran bulan ini', style: TextStyle(color: Colors.grey[500])),
+                  child: Text(
+                    _categoryFilterAll
+                        ? 'Belum ada pengeluaran'
+                        : 'Belum ada pengeluaran di ${DateFormat('MMMM yyyy').format(_categoryMonth)}',
+                    style: TextStyle(color: Colors.grey[500]),
+                  ),
                 ),
               ),
             ],
@@ -318,7 +649,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Pengeluaran per Kategori', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            _categoryHeader(),
             const SizedBox(height: 16),
             SizedBox(
               height: 200,
@@ -437,7 +768,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: _buildProgressRing()),
+                    Expanded(child: _buildTahanStatsCard()),
                     const SizedBox(width: 16),
                     Expanded(child: _buildPieChart()),
                   ],
@@ -447,8 +778,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(flex: 2, child: _buildRecentTransactions()),
-                    const SizedBox(width: 16),
-                    Expanded(flex: 1, child: _buildTahanCard()),
                   ],
                 ),
               ],
@@ -460,48 +789,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: Column(
             children: [
               const SizedBox(height: 20),
-              _buildProgressRing(),
+              _buildTahanStatsCard(),
               const SizedBox(height: 20),
               _buildPieChart(),
               const SizedBox(height: 20),
               _buildRecentTransactions(),
-              const SizedBox(height: 20),
-              _buildTahanCard(),
             ],
           ),
         );
       },
-    );
-  }
-
-  Widget _buildTahanCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(AppConfig.primaryColor).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.shield, color: Color(AppConfig.primaryColor), size: 28),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text('Tahan Pengeluaranmu', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 4),
-                  Text('Buka tab Tahan untuk atur anggaran semester', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

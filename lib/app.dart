@@ -72,7 +72,10 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     _screens = [
-      DashboardScreen(onNavigateToTransactions: () => setState(() => _currentIndex = 1)),
+      DashboardScreen(
+        onNavigateToTransactions: () => setState(() => _currentIndex = 1),
+        onNavigateToTahan: () => setState(() => _currentIndex = 3),
+      ),
       const TransactionsScreen(),
       const ReportsScreen(),
       const TahanPengeluaranScreen(),

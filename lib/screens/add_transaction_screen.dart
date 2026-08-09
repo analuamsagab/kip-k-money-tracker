@@ -21,6 +21,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
   final _descController = TextEditingController();
   final _amountController = TextEditingController();
   String _type = 'expense';
+  String _paymentMethod = 'cash';
   int? _categoryId;
   DateTime _date = DateTime.now();
   List<Category> _categories = [];
@@ -46,6 +47,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
     if (widget.transaction != null) {
       final t = widget.transaction!;
       _type = t.type;
+      _paymentMethod = t.paymentMethod;
       _categoryId = t.categoryId;
       _date = t.date;
       _descController.text = t.description;
@@ -93,6 +95,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
         categoryId: Value(_categoryId!),
         description: Value(_descController.text),
         date: Value(_date),
+        paymentMethod: Value(_paymentMethod),
         updatedAt: Value(now),
       ));
     } else {
@@ -123,6 +126,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           categoryId: _categoryId!,
           description: _descController.text,
           date: _date,
+          paymentMethod: Value(_paymentMethod),
           createdAt: now,
           updatedAt: now,
           integratedToBudget: const Value(true),
@@ -140,6 +144,7 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
           categoryId: _categoryId!,
           description: _descController.text,
           date: _date,
+          paymentMethod: Value(_paymentMethod),
           createdAt: now,
           updatedAt: now,
           integratedToBudget: Value(integrate ? true : null),
@@ -180,6 +185,34 @@ class _AddTransactionScreenState extends ConsumerState<AddTransactionScreen> {
                   child: _typeChip('Pengeluaran', 'expense'),
                 ),
               ],
+            ),
+            const SizedBox(height: 20),
+            Text('Jenis Uang', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: 'cash',
+                    label: Text('Cash'),
+                    icon: Icon(Icons.payments, size: 18),
+                  ),
+                  ButtonSegment(
+                    value: 'ewallet',
+                    label: Text('E-Wallet'),
+                    icon: Icon(Icons.account_balance_wallet, size: 18),
+                  ),
+                ],
+                selected: {_paymentMethod},
+                showSelectedIcon: false,
+                onSelectionChanged: (s) => setState(() => _paymentMethod = s.first),
+                style: SegmentedButton.styleFrom(
+                  selectedBackgroundColor: const Color(0xFF283593).withValues(alpha: 0.1),
+                  selectedForegroundColor: const Color(0xFF283593),
+                  side: const BorderSide(color: Colors.grey, width: 1),
+                ),
+              ),
             ),
             const SizedBox(height: 20),
             TextFormField(

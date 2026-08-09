@@ -6,7 +6,9 @@ import 'package:drift/drift.dart' hide Column;
 import '../database/app_database.dart';
 import '../providers/database_provider.dart';
 import '../widgets/icon_helper.dart';
+import '../widgets/money_field.dart';
 import '../widgets/gradient_app_bar.dart';
+import '../widgets/app_bottom_sheets.dart';
 
 class BudgetsScreen extends ConsumerStatefulWidget {
   const BudgetsScreen({super.key});
@@ -38,32 +40,50 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
     });
   }
 
-  void _showSetBudgetDialog(Category cat) {
+  void _showSetBudgetSheet(Category cat) {
     final existing = _budgets.where((b) => b.categoryId == cat.id).firstOrNull;
-    final controller = TextEditingController(text: existing?.amount.toStringAsFixed(0) ?? '');
+    final controller = TextEditingController(text: existing != null ? groupedAmount(existing.amount) : '');
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Budget ${cat.name}'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'Target Budget', prefixText: 'Rp ', border: OutlineInputBorder()),
-          keyboardType: TextInputType.number,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
-          if (existing != null)
-            TextButton(
-              onPressed: () async {
-                await _db.deleteBudget(existing.id);
-                Navigator.pop(ctx);
-                _load();
-              },
-              child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+    showAppBottomSheet<void>(
+      context,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SheetHeader(
+            title: 'Budget ${cat.name}',
+            subtitle: 'Tetapkan target pengeluaran bulan ini.',
+          ),
+          const SizedBox(height: 20),
+          MoneyField(
+            controller: controller,
+            label: 'Target Budget',
+            helperText: 'Maksimal pengeluaran untuk kategori ini.',
+            autofocus: true,
+          ),
+          const SizedBox(height: 24),
+          if (existing != null) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  side: BorderSide(color: Colors.red.withValues(alpha: 0.5)),
+                ),
+                onPressed: () async {
+                  await _db.deleteBudget(existing.id);
+                  if (context.mounted) Navigator.pop(context);
+                  _load();
+                },
+                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                label: const Text('Hapus Budget', style: TextStyle(color: Colors.red)),
+              ),
             ),
-          FilledButton(
-            onPressed: () async {
+            const SizedBox(height: 12),
+          ],
+          SheetActions(
+            onConfirm: () async {
               final amount = tryParseRupiahInput(controller.text);
               if (amount == null || amount <= 0) return;
               if (existing != null) {
@@ -76,10 +96,11 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
                   year: _year,
                 ));
               }
-              Navigator.pop(ctx);
+              if (context.mounted) Navigator.pop(context);
               _load();
             },
-            child: const Text('Simpan'),
+            confirmLabel: 'Simpan',
+            confirmIcon: Icons.check,
           ),
         ],
       ),
@@ -128,7 +149,7 @@ class _BudgetsScreenState extends ConsumerState<BudgetsScreen> {
                 title: Text(cat.name),
                 subtitle: budget != null ? Text('Target: ${formatRupiah(budget.amount)}') : const Text('Belum ada target', style: TextStyle(fontStyle: FontStyle.italic)),
                 trailing: const Icon(Icons.edit, size: 18),
-                onTap: () => _showSetBudgetDialog(cat),
+                onTap: () => _showSetBudgetSheet(cat),
               ),
             );
           }),

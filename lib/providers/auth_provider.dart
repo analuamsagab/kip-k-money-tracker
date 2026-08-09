@@ -5,8 +5,9 @@ import '../config/app_config.dart';
 class AuthState {
   final GoogleSignInAccount? account;
   final bool isLoading;
+  final String? error;
 
-  const AuthState({this.account, this.isLoading = false});
+  const AuthState({this.account, this.isLoading = false, this.error});
 
   bool get isSignedIn => account != null;
   String get displayName => account?.displayName ?? AppConfig.userName;
@@ -19,6 +20,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   AuthNotifier()
       : _googleSignIn = GoogleSignIn(
+          clientId: AppConfig.googleAndroidClientId,
           serverClientId: AppConfig.googleClientId,
           scopes: ['https://www.googleapis.com/auth/drive.file'],
         ),
@@ -37,9 +39,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = AuthState(isLoading: true, account: state.account);
     try {
       final account = await _googleSignIn.signIn();
+      if (account == null) {
+        state = AuthState(
+          account: state.account,
+          error: 'Sign in Google dibatalkan',
+        );
+        return;
+      }
       state = AuthState(account: account);
-    } catch (_) {
-      state = AuthState(account: state.account);
+    } catch (e) {
+      state = AuthState(
+        account: state.account,
+        error: 'Gagal sign in Google: $e',
+      );
     }
   }
 
