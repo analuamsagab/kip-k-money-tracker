@@ -8,7 +8,7 @@ import '../providers/auth_provider.dart';
 import '../services/drive_backup_service.dart';
 import '../widgets/app_bottom_sheets.dart';
 import 'categories_screen.dart';
-import 'budgets_screen.dart';
+import 'guides_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -99,6 +99,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _restoring = false);
   }
 
+  Future<void> _deleteBackup(DriveBackupInfo backup) async {
+    final confirm = await showAppBottomSheet<bool>(
+      context,
+      child: const ConfirmationSheet(
+        title: 'Hapus Backup?',
+        message: 'File backup ini akan dihapus permanen dari Google Drive.',
+        confirmLabel: 'Hapus',
+        isDanger: true,
+        icon: Icons.delete_outline,
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      final signIn = ref.read(authProvider.notifier).googleSignIn;
+      await _driveService.deleteBackup(signIn, backup.id);
+      await _loadBackups();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Backup dihapus')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menghapus backup: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -113,10 +144,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 20),
           _sectionHeader('Cadangan Data'),
           _buildBackupCard(theme),
-          if (_backups.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _buildBackupHistory(theme),
-          ],
+          const SizedBox(height: 16),
+          _buildBackupHistory(theme),
           const SizedBox(height: 24),
           _sectionHeader('Manajemen'),
           _buildManagementCard(theme),
@@ -246,6 +275,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget _buildBackupHistory(ThemeData theme) {
     final authState = ref.watch(authProvider);
 
+    if (!authState.isSignedIn) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Icon(Icons.cloud_off_outlined, size: 40, color: Colors.grey[400]),
+              const SizedBox(height: 12),
+              const Text(
+                'Login dulu untuk backup & restore',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Riwayat backup tidak tersedia karena kamu belum terhubung ke Google.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Colors.grey[600], height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => ref.read(authProvider.notifier).signIn(),
+                icon: const Icon(Icons.login, size: 18),
+                label: const Text('Masuk dengan Google'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -274,8 +333,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Center(child: Text('Belum ada backup', style: TextStyle(color: Colors.grey[500]))),
               )
             else
-              ...List.generate(_backups.length.clamp(0, 5), (i) {
-                final b = _backups[i];
+              ..._backups.map((b) {
                 return ListTile(
                   dense: true,
                   contentPadding: EdgeInsets.zero,
@@ -295,14 +353,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     b.size > 0 ? '${(b.size / 1024).toStringAsFixed(0)} KB' : 'Unknown size',
                     style: const TextStyle(fontSize: 11),
                   ),
-                  trailing: _restoring
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : IconButton(
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_restoring)
+                        const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      else
+                        IconButton(
                           icon: Icon(Icons.restore, size: 18, color: Colors.orange[700]),
                           tooltip: 'Restore',
                           onPressed: () => _restoreBackup(b.id),
                           visualDensity: VisualDensity.compact,
                         ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                        tooltip: 'Hapus',
+                        onPressed: () => _deleteBackup(b),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ),
                 );
               }),
           ],
@@ -329,12 +399,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ListTile(
             leading: CircleAvatar(
               backgroundColor: Colors.orange.withOpacity(0.1),
-              child: const Icon(Icons.track_changes, color: Colors.orange),
+              child: const Icon(Icons.help_outline, color: Colors.orange),
             ),
-            title: const Text('Target Budget'),
-            subtitle: const Text('Atur budget per kategori'),
+            title: const Text('Panduan & Bantuan'),
+            subtitle: const Text('Cara pakai aplikasi langkah demi langkah'),
             trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BudgetsScreen())),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GuidesScreen())),
           ),
         ],
       ),

@@ -318,7 +318,7 @@ class _TahanPengeluaranScreenState extends ConsumerState<TahanPengeluaranScreen>
             ),
             const SizedBox(height: 8),
             Text(
-              'Aktifkan fitur Tahan dengan mengatur uang semestermu.\nJatah jajan bulananmu akan muncul di sini.',
+              'Aktifkan fitur tahan pengeluaran untuk mengatur uang semestermu',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[600], fontSize: 13, height: 1.4),
             ),

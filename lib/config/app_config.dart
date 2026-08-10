@@ -7,5 +7,5 @@ class AppConfig {
   static const String googleAndroidClientId =
       '983988929442-cgtqhrv6q70l17mv3vh9f8876579ahmt.apps.googleusercontent.com';
   static const String appName = 'KIP-K Money Tracker';
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '2.5.0';
 }

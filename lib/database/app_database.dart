@@ -182,6 +182,20 @@ class AppDatabase extends _$AppDatabase {
   Future<int> deleteCategory(int id) =>
       (delete(categories)..where((t) => t.id.equals(id))).go();
 
+  Future<int> countTransactionsByCategory(int categoryId) =>
+      (selectOnly(transactions)
+            ..addColumns([transactions.id.count()])
+            ..where(transactions.categoryId.equals(categoryId)))
+          .map((row) => row.read(transactions.id.count())!)
+          .getSingle();
+
+  Future<int> countBudgetsByCategory(int categoryId) =>
+      (selectOnly(budgets)
+            ..addColumns([budgets.id.count()])
+            ..where(budgets.categoryId.equals(categoryId)))
+          .map((row) => row.read(budgets.id.count())!)
+          .getSingle();
+
   // ========= TRANSACTIONS =========
 
   Future<List<Transaction>> getAllTransactions() =>

@@ -105,6 +105,11 @@ class DriveBackupService {
     }
   }
 
+  Future<void> deleteBackup(GoogleSignIn signIn, String fileId) async {
+    final api = await _api(signIn);
+    await api.files.delete(fileId);
+  }
+
   Future<void> _cleanupOldBackups(drive.DriveApi api, String folderId) async {
     final result = await api.files.list(
       q: "'$folderId' in parents and trashed=false",
